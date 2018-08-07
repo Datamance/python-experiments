@@ -33,6 +33,28 @@ object.
 
 The task is executed in get_running_loop() context, RuntimeError is raised if
 there is no running loop in current thread.
+
+
+PHILOSOPHY:
+
+- All async anything, meaning all IO bound things, should be done in the main
+  thread.
+
+- All CPU-bound things should be delegated to the workers.
+
+
+ARCHITECTURE:
+
+- This is going to be something like a task graph - a series of nodes that
+have inputs and outputs.
+
+- Tasks output to routers (queues). Those routers copy that output and send it
+  to the reducers of the functions that need those outputs as inputs.
+
+- Tasks can have many inputs, but only one output. As previously mentioned,
+  it's up to the router to copy that output and route it to a reducer.
+
+- Tasks output to routers (queues). Those routers output to reducers
 """
 
 
