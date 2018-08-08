@@ -54,7 +54,24 @@ have inputs and outputs.
 - Tasks can have many inputs, but only one output. As previously mentioned,
   it's up to the router to copy that output and route it to a reducer.
 
-- Tasks output to routers (queues). Those routers output to reducers
+- Tasks output to routers (queues). Those routers output to reducers.
+
+Routers:
+- Have queues.
+- await put() into those queues
+- await get() from those queues
+- get() results are tuple of (worker_name, result) --> worker name keys a dict
+  where the values are the list of reducers, the value is copied and put into
+  the reducer queue for each.
+
+Reducers:
+- have Queues
+- await put() into those queues
+- immediately get() from the queue
+- get the result and cache it according to the passed worker name (key it)
+- keep waiting until you have all the necessary inputs
+- finally, when all keys have values, pop() them all and have your serializer
+  run.
 """
 
 
@@ -93,12 +110,12 @@ class DaemonLord:
         """Creates a daemon and adds it to the loop."""
         self._tasks.append(
             self._loop.create_task(
-                daemon(worker_file, input_queue, output_queue))
+                daemon_coro(worker_file, input_queue, output_queue))
         )
 
 
 
-async def daemon(worker_file, input_queue, output_queue):
+async def daemon_coro(worker_file, input_queue, output_queue):
     # Create the subprocess, redirect the standard output into a pipe
     proc = await asyncio.create_subprocess_exec(
         sys.executable, '-u', worker_file,
@@ -110,7 +127,8 @@ async def daemon(worker_file, input_queue, output_queue):
         in_bytes = await input_queue.get()
         proc.stdin.write(in_bytes)
         out_bytes = await proc.stdout.readline()
-        await output_queue.put()  # Only care if there is a full queue.
+        await output_queue.put()
+        # above, "await" only matters if there is a full queue.
 
 
 class Daemonizer:
@@ -144,7 +162,7 @@ class Daemonizer:
             arg_collector.append(input_args)
 
             if len(arg_collector) < batch_size:
-                continue
+                continue  # Keep collecting
             else:
                 result = main_fn(arg_collector)
                 arg_collector = []  # Reset
