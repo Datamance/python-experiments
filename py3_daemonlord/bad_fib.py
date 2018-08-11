@@ -18,5 +18,8 @@ def input_deserializer(bytes_obj):
 output_serializer = partial(pack, ">I")
 
 
-daemonized = Daemonizer(main, input_deserializer, output_serializer)
+daemonized = Daemonizer(
+    main, input_deserializer=input_deserializer,
+    output_serializer=output_serializer)
+
 daemonized.run()

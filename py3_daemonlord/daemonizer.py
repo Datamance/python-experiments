@@ -72,6 +72,17 @@ Reducers:
 - keep waiting until you have all the necessary inputs
 - finally, when all keys have values, pop() them all and have your serializer
   run.
+
+
+these things ARE special queues. They are queues but doing slightly different
+strategies for input and output.
+
+Reducers in specific must have a BUFFER for output.
+
+
+
+TODO(Datamance): Reducers and Routers are done. Now, we need to know how to
+create them dynamically. We may need a registry for this.
 """
 
 
@@ -82,6 +93,8 @@ import asyncio
 AsyncQueue = asyncio.Queue
 subprocess = asyncio.subprocess
 
+
+# IMPORTED INTO MASTER
 
 class DaemonLord:
     """The Lord of the daemons!
@@ -106,13 +119,10 @@ class DaemonLord:
         self._loop.stop()
         self._loop.close()
 
-    def create_daemon(self, worker_file, input_queue, output_queue):
+    def spawn(self, worker_file, input_queue, output_queue):
         """Creates a daemon and adds it to the loop."""
-        self._tasks.append(
-            self._loop.create_task(
-                daemon_coro(worker_file, input_queue, output_queue))
-        )
-
+        task = self._loop.create_task(
+            daemon_coro(worker_file, input_queue, output_queue))
 
 
 async def daemon_coro(worker_file, input_queue, output_queue):
@@ -126,10 +136,72 @@ async def daemon_coro(worker_file, input_queue, output_queue):
     while True:
         in_bytes = await input_queue.get()
         proc.stdin.write(in_bytes)
+        # PROCESSING HAPPENS HERE!
         out_bytes = await proc.stdout.readline()
-        await output_queue.put()
+        await output_queue.put(out_bytes)
         # above, "await" only matters if there is a full queue.
 
+
+class Worker:
+    """Worky work busy bee"""
+    pass
+
+
+DEFAULT_REDUCER = b''.join
+
+
+class Reducer():
+    """Takes multiple inputs and concatenates them to one."""
+
+    def __init__(self, queue_defs, master_loop, reducer=DEFAULT_REDUCER):
+        self._loop = master_loop
+        self._reduce = reducer
+        self._queues = {
+            queue_spec[0]: AsyncQueue(maxsize=queue_spec[1], loop=self._loop)
+            for queue_spec in queue_defs
+        }
+
+    def add_queue(self, queue_spec):
+        """Add a queue."""
+        self._queues[queue_spec[0]] = AsyncQueue(
+            maxsize=queue_spec[1], loop=self._loop)
+
+
+    async def get(self):
+        results = await self._loop.run_until_complete(
+            self._loop.gather(
+                *[subqueue.get() for subqueue in self._queues.values()]
+            )
+        )
+
+        return self._reduce(results)
+
+    async def put(self, subqueue, item):
+        await self._queues[subqueue].put(item)
+
+
+class Router():
+    """Ensures that multiple subscribers will recieve the same input."""
+    def _init(self, queue_defs, master_loop):
+        self._loop = master_loop
+        self._queues = {
+            queue_spec[0]: AsyncQueue(maxsize=queue_spec[1], loop=self._loop)
+            for queue_spec in queue_defs
+        }
+
+    async def put(self, value):
+        await self._loop.run_until_complete(
+            self._loop.gather(
+                *[subqueue.put(value) for subqueue in self._queues.values()]
+            )
+        )
+
+    async def get(self, subqueue):
+        value = await self._output_queues[subqueue].get()
+        return value
+
+
+# IMPORTED INTO WORKER
 
 class Daemonizer:
     """Import this, instantiate it, and run it in your worker file."""
@@ -162,7 +234,7 @@ class Daemonizer:
             arg_collector.append(input_args)
 
             if len(arg_collector) < batch_size:
-                continue  # Keep collecting
+                continue  # jump to next loop!
             else:
                 result = main_fn(arg_collector)
                 arg_collector = []  # Reset
