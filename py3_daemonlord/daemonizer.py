@@ -79,8 +79,6 @@ strategies for input and output.
 
 Reducers in specific must have a BUFFER for output.
 
-
-
 TODO(Datamance): Reducers and Routers are done. Now, we need to know how to
 create them dynamically. We may need a registry for this.
 """
@@ -94,17 +92,20 @@ AsyncQueue = asyncio.Queue
 subprocess = asyncio.subprocess
 
 
+DEFAULT_REDUCER = b''.join
+
+
 # IMPORTED INTO MASTER
 
-class DaemonLord:
-    """The Lord of the daemons!
-
-    This guy should tie processes together with queues.
-    """
+class Manasa:
+    """The goddess of the serpents!"""
 
     def __init__(self):
         """Constructor."""
         self._loop = asyncio.get_event_loop()
+        self._workers = {}
+        self._reducers = {}
+        self._routers = {}
 
     def run(self):
         """Run until complete."""
@@ -119,10 +120,22 @@ class DaemonLord:
         self._loop.stop()
         self._loop.close()
 
-    def spawn(self, worker_file, input_queue, output_queue):
+    def worker(self, worker_name: str, worker_path: str):
+        """Creates a worker"""
+
+    def route(self, from, to):
+        """Route things together."""
+
+    def reduce(self, from, to):
+        """Reduce."""
+
+    def spawn(self, worker_file, input_queuedef, output_queuedef):
+        """Spawns a worker."""
+        # task = await self._spawn()
+
+    def _spawn(self, worker_path: str, in_q, out_q):
         """Creates a daemon and adds it to the loop."""
-        task = self._loop.create_task(
-            daemon_coro(worker_file, input_queue, output_queue))
+        return self._loop.create_task(daemon_coro(worker_path, in_q, out_q))
 
 
 async def daemon_coro(worker_file, input_queue, output_queue):
@@ -142,19 +155,12 @@ async def daemon_coro(worker_file, input_queue, output_queue):
         # above, "await" only matters if there is a full queue.
 
 
-class Worker:
-    """Worky work busy bee"""
-    pass
-
-
-DEFAULT_REDUCER = b''.join
-
-
 class Reducer():
     """Takes multiple inputs and concatenates them to one."""
 
-    def __init__(self, queue_defs, master_loop, reducer=DEFAULT_REDUCER):
-        self._loop = master_loop
+    def __init__(
+            self, queue_defs=(,), master_loop=None, reducer=DEFAULT_REDUCER):
+        self._loop = master_loop or asyncio.get_running_loop()
         self._reduce = reducer
         self._queues = {
             queue_spec[0]: AsyncQueue(maxsize=queue_spec[1], loop=self._loop)
@@ -182,12 +188,22 @@ class Reducer():
 
 class Router():
     """Ensures that multiple subscribers will recieve the same input."""
-    def _init(self, queue_defs, master_loop):
-        self._loop = master_loop
+    def __init__(self, queue_defs=(,), master_loop=None):
+        self._loop = master_loop or asyncio.get_running_loop()
         self._queues = {
             queue_spec[0]: AsyncQueue(maxsize=queue_spec[1], loop=self._loop)
             for queue_spec in queue_defs
         }
+
+    def add_queue(self, queue_spec):
+        """Add a queue."""
+        self._queues[queue_spec[0]] = AsyncQueue(
+            maxsize=queue_spec[1], loop=self._loop)
+
+
+    async def get(self, subqueue):
+        value = await self._output_queues[subqueue].get()
+        return value
 
     async def put(self, value):
         await self._loop.run_until_complete(
@@ -195,10 +211,6 @@ class Router():
                 *[subqueue.put(value) for subqueue in self._queues.values()]
             )
         )
-
-    async def get(self, subqueue):
-        value = await self._output_queues[subqueue].get()
-        return value
 
 
 # IMPORTED INTO WORKER
@@ -226,18 +238,21 @@ class Daemonizer:
         # In the future, somehow limit this to batch size or whatever
 
         while True:
-            # 1) Get inputs from stdin.
-            input_bytes = sys.stdin.readline()
-            # the below could be: functools.partial(struct.pack, 'hhl')
-            input_args = deserialize(input_bytes)
+            if deserialize:
+                # 1) Get inputs from stdin.
+                input_bytes = sys.stdin.readline()
+                # the below could be: functools.partial(struct.pack, 'hhl')
+                input_args = deserialize(input_bytes)
+                arg_collector.append(input_args)
 
-            arg_collector.append(input_args)
-
-            if len(arg_collector) < batch_size:
-                continue  # jump to next loop!
+                if len(arg_collector) < batch_size:
+                    continue  # jump to next loop!
+                else:
+                    result = main_fn(arg_collector)
+                    arg_collector = []  # Reset
             else:
-                result = main_fn(arg_collector)
-                arg_collector = []  # Reset
-                # Assumes returning a tuple of outputs.
+                result = main_fn()
+
+            if serialize:
                 output_bytes = serialize(result)
                 sys.stdout.write(output_bytes + b"\n")

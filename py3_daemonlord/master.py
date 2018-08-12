@@ -34,53 +34,32 @@ master.reduce(
     from=[task_two, task_three, task_four], to=task_five, how=None, with=None)
 """
 
-from daemonizer import DaemonLord, Worker, Reducer, Router
-import random
-
-
-def input_generator():
-    yield random.randint(1, 30)
-
+from daemonizer import Manasa
 
 ####
 # Example static initialization
 ####
-TASK_CONFIG = {  # Optional - 1:1 mapping with constructors!
-    "input_generator": input_generator
-    # "output_queue":
-}  # Will need a "recursive initializer" for this!
+# TASK_CONFIG = {}
 
 
-###
-# Example declarative initialization
-###
+####
+# Example imperative initialization
+####
+manasa = Manasa()
 
-# master = DaemonLord(TASK_CONFIG)
-master = DaemonLord()
+# manasa.register()
 
-# Should be able to take actual imported module as well?
-first_fib = Worker("bad_fib.py")
-second_fib = Worker("bad_fib.py")
+manasa.worker("input_gen", "input_gen.py")
+manasa.worker("bad_fib", "bad_fib.py")
+manasa.worker("bad_fib_2", "bad_fib.py")
+manasa.worker("bad_gcd", "bad_gcd.py")
 
-adder = Worker("bad_gcd.py")
+manasa.route("input_gen", ("bad_fib", "bad_fib_2"))
 
-# A reducer must:
-# 1) establish ONE QUEUE PER INPUT!
-# 2) Take those inputs and concatenate them somehow.
-reducer = Reducer(inputs=(first_fib, second_fib))
+manasa.reduce(("bad_fib", "bad_fib_2"), "bad_gcd")
 
-router = Router(input=reducer, )
+manasa.output("bad_gcd")
 
+manasa.finalize()
 
-# MUST HAVES FOR API
-# Registry - for when you want to be able to just use strings when you do the
-# declarative API later.
-master.register(
-    input_source=input_generator,
-    workers=[("first_fib", Worker("bad_fib.py")),
-             ("second_fib", Worker("bad_fib.py"))],
-    reducers=[("first_and_second_fib", Reducer())],
-    routers=[("")]
-)
-
-master.start()
+manasa.run()
