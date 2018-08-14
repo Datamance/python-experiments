@@ -133,7 +133,7 @@ class Manasa:
 
     def feed(self, source_name, target_name, buffer_size=0):
         """Feeds one process to another via regular async queue."""
-        queue = AsyncQueue(max_size=buffer_size, loop=self._loop)
+        queue = AsyncQueue(maxsize=buffer_size, loop=self._loop)
         self._workers[source_name].set_output(queue)
         self._workers[source_name].set_input(queue)
 
@@ -249,7 +249,6 @@ class Reducer(Node):
             *[subqueue.get() for subqueue in self._queues.values()]
         )
 
-        print("RESULTS: ", results)
         return self._reduce(results)
 
 
