@@ -7,7 +7,7 @@ import time
 
 def main(foo):
     """Crappy fibonacci - we want big compute times to prove a point here."""
-    time.sleep(1)
+    # time.sleep(1)
     if foo <= 2:
         return 1
     else:

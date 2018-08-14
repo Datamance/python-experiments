@@ -7,8 +7,8 @@ import time
 
 
 def main():
-    time.sleep(1)
-    return random.randint(1, 30)
+    # time.sleep(1)
+    return random.randint(1, 5)
 
 
 serialize = functools.partial(struct.pack, ">I")

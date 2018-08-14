@@ -7,7 +7,7 @@ import time
 
 def main(first, second):
     """Crappy greatest common divisor"""
-    time.sleep(1)
+    # time.sleep(1)
     for x in reversed(range(min(first, second))):
         if first % x == 0 and second % x == 0:
             return x  # guaranteed to return at least 1

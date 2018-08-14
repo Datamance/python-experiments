@@ -90,7 +90,11 @@ AsyncQueue = asyncio.Queue
 subprocess = asyncio.subprocess
 
 
-DEFAULT_REDUCER = b''.join
+def _default_reducer(bin_args):
+    return b''.join([arg.rstrip(b"\n") for arg in bin_args])
+
+
+DEFAULT_REDUCER = _default_reducer
 
 
 # IMPORTED INTO MASTER
