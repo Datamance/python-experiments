@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 An example master file.
 
@@ -58,8 +59,6 @@ manasa.route("input_gen", ("bad_fib", "bad_fib_2"))
 
 manasa.reduce(("bad_fib", "bad_fib_2"), "bad_gcd")
 
-manasa.output("bad_gcd")
-
-manasa.finalize()
+# manasa.output("bad_gcd")
 
 manasa.run()

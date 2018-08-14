@@ -1,11 +1,14 @@
+# -*- coding: utf-8 -*-
 import random
 import struct
 import functools
 from daemonizer import Daemonizer
+import time
 
 
 def main():
-    yield random.randint(1, 30)
+    time.sleep(1)
+    return random.randint(1, 30)
 
 
 serialize = functools.partial(struct.pack, ">I")
@@ -13,4 +16,5 @@ serialize = functools.partial(struct.pack, ">I")
 
 daemonized = Daemonizer(main, output_serializer=serialize)
 
-daemonized.run()
+if __name__ == "__main__":
+    daemonized.run()

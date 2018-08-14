@@ -1,4 +1,5 @@
 
+# -*- coding: utf-8 -*-
 """
 Things a coroutine can do:
 
@@ -76,19 +77,13 @@ Reducers:
 
 these things ARE special queues. They are queues but doing slightly different
 strategies for input and output.
-
-Reducers in specific must have a BUFFER for output.
-
-TODO(Datamance): Reducers and Routers are done. Now, we need to know how to
-create them dynamically. We may need a registry for this.
-
-
 """
 
 
 import sys
 import asyncio
 from typing import Iterable
+import struct
 
 
 AsyncQueue = asyncio.Queue
@@ -106,22 +101,25 @@ class Manasa:
     def __init__(self):
         """Constructor."""
         self._loop = asyncio.get_event_loop()
+        # asyncio.get_child_watcher().attach_loop(self._loop)
+        # asyncio.set_event_loop(self._loop)
         self._workers = {}
         self._reducers = {}
         self._routers = {}
 
     def run(self):
         """Run until complete."""
+
         self.spawn()
 
         try:
             self._loop.run_forever()
         finally:
-            self._loop.run_until_complete(self._loop.shutdown_asyncgens())
-            self._loop.close()
+            self.die()
 
     def die(self):
         """Stop the loop."""
+        self._loop.run_until_complete(self._loop.shutdown_asyncgens())
         self._loop.stop()
         self._loop.close()
 
@@ -138,6 +136,7 @@ class Manasa:
 
     def route(self, source_name : str, target_list: Iterable[str]):
         """Route things together."""
+        print("INSIDE ROUTE")
         router = self._routers.setdefault(
             source_name, Router(master_loop=self._loop))
 
@@ -174,7 +173,7 @@ class Manasa:
 
 
 class Node:
-    """"""
+    """Will build this out eventually for task graph purposes."""
 
 
 
@@ -183,7 +182,8 @@ class Worker(Node):
     def __init__(self, worker_path, in_q=None, out_q=None):
         """Class is a really great way to maintain state, go figure :)"""
         self._proc = None
-        self._worker_path = _worker_path
+        self._worker_path = worker_path
+        print(f"initializing {worker_path}")
         self._input = in_q
         self._output = out_q
 
@@ -210,19 +210,23 @@ class Worker(Node):
             await self.init()
         # Read one line of output
         while True:
-            in_bytes = await self._input.get()
-            self._proc.stdin.write(in_bytes + b"\n")
+            if self._input:
+                in_bytes = await self._input.get()
+                print(f"PUTTING BYTES INTO {self._worker_path}")
+                print(in_bytes)
+                self._proc.stdin.write(in_bytes)
             # PROCESSING HAPPENS HERE!
-            out_bytes = await self._proc.stdout.readline()
-            await self._output.put(out_bytes)
-            # above, "await" only matters if there is a full queue.
+            if self._output:
+                out_bytes = await self._proc.stdout.readline()
+                await self._output.put(out_bytes)
+                # above, "await" only matters if there is a full queue.
 
 
 class Reducer(Node):
     """Takes multiple inputs and concatenates them to one."""
 
     def __init__(
-            self, queue_defs=(,), master_loop=None, reducer=DEFAULT_REDUCER):
+            self, queue_defs=(), master_loop=None, reducer=DEFAULT_REDUCER):
         self._loop = master_loop or asyncio.get_running_loop()
         self._reduce = reducer
         self._queues = {  # 0 is name, 1 is size
@@ -237,18 +241,17 @@ class Reducer(Node):
 
 
     async def get(self):
-        results = await self._loop.run_until_complete(
-            self._loop.gather(
-                *[subqueue.get() for subqueue in self._queues.values()]
-            )
+        results = await asyncio.gather(
+            *[subqueue.get() for subqueue in self._queues.values()]
         )
 
+        print("RESULTS: ", results)
         return self._reduce(results)
 
 
 class Router(Node):
     """Ensures that multiple subscribers will recieve the same input."""
-    def __init__(self, queue_defs=(,), master_loop=None):
+    def __init__(self, queue_defs=(), master_loop=None):
         self._loop = master_loop or asyncio.get_running_loop()
         self._queues = {
             queue_spec[0]: AsyncQueue(maxsize=queue_spec[1], loop=self._loop)
@@ -262,14 +265,9 @@ class Router(Node):
 
 
     async def put(self, value):
-        await self._loop.run_until_complete(
-            self._loop.gather(
-                *[subqueue.put(value) for subqueue in self._queues.values()]
-            )
+        await asyncio.gather(
+            *[subqueue.put(value) for subqueue in self._queues.values()]
         )
-
-
-
 
 
 # IMPORTED INTO WORKER
@@ -299,19 +297,19 @@ class Daemonizer:
         while True:
             if deserialize:
                 # 1) Get inputs from stdin.
-                input_bytes = sys.stdin.readline()
+                input_bytes = sys.stdin.buffer.readline().rstrip(b"\n")
                 # the below could be: functools.partial(struct.pack, 'hhl')
-                input_args = deserialize(input_bytes)
+                input_args = deserialize(input_bytes)[0]
                 arg_collector.append(input_args)
 
                 if len(arg_collector) < batch_size:
                     continue  # jump to next loop!
                 else:
-                    result = main_fn(arg_collector)
+                    result = main_fn(*arg_collector)
                     arg_collector = []  # Reset
             else:
                 result = main_fn()
 
             if serialize:
                 output_bytes = serialize(result)
-                sys.stdout.write(output_bytes + b"\n")
+                sys.stdout.buffer.write(output_bytes + b"\n")
