@@ -36,6 +36,7 @@ master.reduce(
 """
 
 from daemonizer import Manasa
+import struct
 
 ####
 # Example static initialization
@@ -51,14 +52,29 @@ manasa = Manasa()
 # manasa.register()
 
 manasa.worker("input_gen", "input_gen.py")
+manasa.worker("input_gen_2", "input_gen.py")
 manasa.worker("bad_fib", "bad_fib.py")
 manasa.worker("bad_fib_2", "bad_fib.py")
 manasa.worker("bad_gcd", "bad_gcd.py")
 
-manasa.route("input_gen", ("bad_fib", "bad_fib_2"))
+# manasa.route("input_gen", ("bad_fib", "bad_fib_2"))
+manasa.route("input_gen", ("bad_fib",))
+manasa.route("input_gen_2", ("bad_fib_2",))
 
 manasa.reduce(("bad_fib", "bad_fib_2"), "bad_gcd")
 
-# manasa.output("bad_gcd")
+
+async def consumer_coro(out_queue):
+    while True:
+        value = await out_queue.get()
+        try:
+            print(struct.unpack(">I", value.rstrip(b"\n")))
+        except Exception as e:
+            breakpoint()
+            print(e)
+        # with open('my_test.txt', 'a') as file:
+        #     file.write(str(struct.unpack(">II", value)))
+
+manasa.output("bad_gcd", consumer_coro)
 
 manasa.run()

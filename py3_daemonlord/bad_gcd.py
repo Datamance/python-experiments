@@ -2,13 +2,15 @@
 from daemonizer import Daemonizer
 from functools import partial
 from struct import pack, unpack
-import time
+# import random
+# import time
 
 
 def main(first, second):
     """Crappy greatest common divisor"""
     # time.sleep(1)
-    for x in reversed(range(min(first, second))):
+
+    for x in range(min(first, second), 0, -1):
         if first % x == 0 and second % x == 0:
             return x  # guaranteed to return at least 1
 

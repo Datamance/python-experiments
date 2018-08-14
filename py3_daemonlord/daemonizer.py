@@ -91,7 +91,7 @@ subprocess = asyncio.subprocess
 
 
 def _default_reducer(bin_args):
-    return b''.join([arg.rstrip(b"\n") for arg in bin_args])
+    return b''.join([arg.rstrip(b"\n") for arg in bin_args]) + b"\n"
 
 
 DEFAULT_REDUCER = _default_reducer
@@ -135,7 +135,7 @@ class Manasa:
         """Feeds one process to another via regular async queue."""
         queue = AsyncQueue(maxsize=buffer_size, loop=self._loop)
         self._workers[source_name].set_output(queue)
-        self._workers[source_name].set_input(queue)
+        self._workers[target_name].set_input(queue)
 
 
     def route(self, source_name : str, target_list: Iterable[str]):
@@ -154,7 +154,6 @@ class Manasa:
             target.set_input(queue)
 
 
-
     def reduce(self, source_list, target_worker):
         """Reduce."""
         reducer = self._reducers.setdefault(
@@ -168,6 +167,13 @@ class Manasa:
             source = self._workers[source_name]
             queue = reducer.get_queue(source_name)
             source.set_output(queue)
+
+    def output(self, worker_name, consumer_coro, buffer_size=0):
+        """Get output from worker."""
+        worker = self._workers[worker_name]
+        out_queue = AsyncQueue(maxsize=buffer_size, loop=self._loop)
+        worker.set_output(out_queue)
+        self._loop.create_task(consumer_coro(out_queue))
 
 
     def spawn(self):
@@ -216,12 +222,14 @@ class Worker(Node):
         while True:
             if self._input:
                 in_bytes = await self._input.get()
-                print(f"PUTTING BYTES INTO {self._worker_path}")
-                print(in_bytes)
+                # if self._worker_path == "bad_gcd.py":
+                #     breakpoint()
                 self._proc.stdin.write(in_bytes)
             # PROCESSING HAPPENS HERE!
             if self._output:
                 out_bytes = await self._proc.stdout.readline()
+                # if self._worker_path == "bad_gcd.py":
+                #     breakpoint()
                 await self._output.put(out_bytes)
                 # above, "await" only matters if there is a full queue.
 
@@ -248,7 +256,6 @@ class Reducer(Node):
         results = await asyncio.gather(
             *[subqueue.get() for subqueue in self._queues.values()]
         )
-
         return self._reduce(results)
 
 
@@ -301,18 +308,20 @@ class Daemonizer:
             if deserialize:
                 # 1) Get inputs from stdin.
                 input_bytes = sys.stdin.buffer.readline().rstrip(b"\n")
-                # the below could be: functools.partial(struct.pack, 'hhl')
-                input_args = deserialize(input_bytes)[0]
+                # the below could be: functools.partial(struct.pack, 'hhl'),
+                # which means EXPECT it to be a tuple.
+                input_args = deserialize(input_bytes)
                 arg_collector.append(input_args)
 
                 if len(arg_collector) < batch_size:
                     continue  # jump to next loop!
                 else:
-                    result = main_fn(*arg_collector)
+                    results = [main_fn(*args) for args in arg_collector]
                     arg_collector = []  # Reset
             else:
-                result = main_fn()
+                results = [main_fn()]
 
             if serialize:
-                output_bytes = serialize(result)
-                sys.stdout.buffer.write(output_bytes + b"\n")
+                for result in results:
+                    output_bytes = serialize(result)
+                    sys.stdout.buffer.write(output_bytes + b"\n")
