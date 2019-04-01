@@ -60,7 +60,7 @@ def sift_down(heap, parent_ptr, end=None, compare=gt):
     Side Effects:
         Mutates the first argument, heap.
     """
-    ptr_to_last = end or len(heap) - 1
+    ptr_to_last = end if end is not None else len(heap) - 1
     left_ptr = 2 * parent_ptr + 1
     right_ptr = left_ptr + 1
 
@@ -88,7 +88,7 @@ def sift_down(heap, parent_ptr, end=None, compare=gt):
 
         demarcate(heap, parent_ptr, potential_swap_ptr, kind=SWAP)
 
-        sift_down(heap, potential_swap_ptr, compare=compare)
+        sift_down(heap, potential_swap_ptr, end=ptr_to_last, compare=compare)
 
 
 def heapsort(array):
@@ -96,11 +96,8 @@ def heapsort(array):
 
     heapify(array, kind=MAX)
 
-    while ptr_to_last >= 0:  # keep swapping first and last and sifting down.
-        array[0], array[ptr_to_last] = (
-            array[ptr_to_last],
-            array[0],
-        )  # first and last are switched.
+    while ptr_to_last > 0:  # keep swapping first and last and sifting down.
+        array[0], array[ptr_to_last] =  array[ptr_to_last], array[0]  # first and last are switched.
         ptr_to_last -= 1  # reduce heap size by one.
         sift_down(array, 0, end=ptr_to_last)  # restore heap property.
 
@@ -114,8 +111,6 @@ def demarcate(array, first, second, kind=SWAP):
 
     full_output = f"{message}\n{heap}\n{array}\n\n{code}\n"
     sys.stdout.write(full_output)
-    input()
-    sys.stdout.write("\b" * len(full_output))
 
 
 def demarcate_items_in_array(array, first, second, kind=SWAP):
@@ -196,5 +191,5 @@ print("\n{:-^100}\n".format("<*****BINARY SEARCH TREE*****>"))
 print("\nHeap sorting...\n")
 heapsort(test_one)
 print(test_one)
-print(sorted(test_one, reverse=True))
+print(sorted(test_one))
 mine = binarytree.build(test_one)
