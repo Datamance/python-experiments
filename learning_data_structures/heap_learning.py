@@ -166,7 +166,8 @@ def demarcate_code():
     """Serious shit!"""
     buffer = " . " * 4
     # We want to make sure this works in a debugger, so we get that info from the frames.
-    frame_info = [fi for fi in inspect.stack() if fi.filename == __file__ and fi.function == "sift_down"][0]
+    sift_frames = [fi for fi in inspect.stack() if fi.filename == __file__ and fi.function == "sift_down"]
+    frame_info = sift_frames[0]
     line_of_execution = frame_info.frame.f_lineno
     segments = LINES_FROM_THIS_FILE[line_of_execution - 5: line_of_execution + 5]
     segments[6] = colored(segments[6], CYAN, attrs=["bold"])
